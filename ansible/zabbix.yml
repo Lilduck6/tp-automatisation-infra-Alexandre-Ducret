@@ -1,0 +1,13 @@
+- name: Mission 4 - Install Zabbix Server on Admin (Ubuntu)
+  hosts: admin
+  become: true
+  gather_facts: true
+  roles:
+    - zabbix_server
+
+- name: Mission 4 - Install Zabbix Agent on Rocky nodes
+  hosts: linux_nodes
+  become: true
+  gather_facts: true
+  roles:
+    - zabbix_agent

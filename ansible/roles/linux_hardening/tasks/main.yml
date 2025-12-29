@@ -1,0 +1,94 @@
+---
+# =========================
+# FIREWALLD (Rocky/Alma)
+# =========================
+- name: Ensure firewalld installed
+  ansible.builtin.dnf:
+    name: firewalld
+    state: present
+
+- name: Enable and start firewalld
+  ansible.builtin.systemd:
+    name: firewalld
+    enabled: true
+    state: started
+
+- name: Set default zone to public
+  ansible.builtin.command: firewall-cmd --set-default-zone=public
+  changed_when: false
+  failed_when: false
+
+- name: Allow SSH + HTTP
+  ansible.posix.firewalld:
+    service: "{{ item }}"
+    permanent: true
+    state: enabled
+  loop:
+    - ssh
+    - http
+
+- name: Allow cluster UDP ports (corosync)
+  ansible.posix.firewalld:
+    port: "{{ item }}"
+    permanent: true
+    state: enabled
+  loop: "{{ cluster_udp_ports }}"
+
+- name: Allow cluster TCP ports (pcsd)
+  ansible.posix.firewalld:
+    port: "{{ item }}"
+    permanent: true
+    state: enabled
+  loop: "{{ cluster_tcp_ports }}"
+
+- name: Allow Zabbix agent port
+  ansible.posix.firewalld:
+    port: "{{ zabbix_agent_port }}/tcp"
+    permanent: true
+    state: enabled
+
+- name: Allow Samba service (needed by mission 1)
+  ansible.posix.firewalld:
+    service: samba
+    permanent: true
+    state: enabled
+
+- name: Reload firewalld
+  ansible.builtin.command: firewall-cmd --reload
+  changed_when: false
+
+# =========================
+# SSH hardening : root login OFF
+# =========================
+- name: Disable root SSH login
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^\s*PermitRootLogin\s+'
+    line: 'PermitRootLogin no'
+  notify: restart sshd
+
+# =========================
+# Auto security updates
+# =========================
+- name: Install dnf-automatic
+  ansible.builtin.dnf:
+    name: dnf-automatic
+    state: present
+
+- name: Configure dnf-automatic apply_updates
+  ansible.builtin.lineinfile:
+    path: /etc/dnf/automatic.conf
+    regexp: '^apply_updates\s*='
+    line: 'apply_updates = yes'
+
+- name: Configure dnf-automatic upgrade_type security
+  ansible.builtin.lineinfile:
+    path: /etc/dnf/automatic.conf
+    regexp: '^upgrade_type\s*='
+    line: 'upgrade_type = security'
+
+- name: Enable dnf-automatic timer
+  ansible.builtin.systemd:
+    name: dnf-automatic.timer
+    enabled: true
+    state: started

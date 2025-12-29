@@ -1,0 +1,125 @@
+---
+# ==========================================================
+# HA Cluster Rocky Linux : pcs / pacemaker / corosync
+# Bootstrap: node01
+# VIP: vip_address/vip_cidr on vip_iface (auto if empty)
+# ==========================================================
+
+- name: Install HA packages
+  ansible.builtin.dnf:
+    name:
+      - pcs
+      - pacemaker
+      - corosync
+      - fence-agents-all
+      - net-tools
+    state: present
+    update_cache: true
+  become: true
+
+- name: Enable and start pcsd
+  ansible.builtin.systemd:
+    name: pcsd
+    enabled: true
+    state: started
+  become: true
+
+- name: Set hacluster password (hashed)
+  ansible.builtin.user:
+    name: hacluster
+    password: "{{ hacluster_password_plain | password_hash('sha512') }}"
+    update_password: always
+  become: true
+
+- name: Restart pcsd to apply password
+  ansible.builtin.systemd:
+    name: pcsd
+    state: restarted
+  become: true
+
+# ---- Ensure hosts resolution ----
+- name: Ensure /etc/hosts entries for cluster nodes
+  ansible.builtin.blockinfile:
+    path: /etc/hosts
+    marker: "# {mark} ANSIBLE-CLUSTER"
+    block: |
+      {{ hostvars['node01'].ansible_host }} node01
+      {{ hostvars['node02'].ansible_host }} node02
+  become: true
+
+# ---- Detect interface for lab subnet if not provided ----
+- name: Detect interface for LAB subnet (IPv4)
+  ansible.builtin.shell: |
+    ip -o -4 addr show | awk '/{{ lab_subnet | regex_escape() }}\\// {print $2}' | head -n1
+  register: detected_iface
+  changed_when: false
+  failed_when: false
+
+- name: Set VIP interface effective
+  ansible.builtin.set_fact:
+    vip_iface_effective: "{{ (vip_iface | length > 0) | ternary(vip_iface, detected_iface.stdout) }}"
+  changed_when: false
+
+# ==========================================================
+# Cluster bootstrap ONLY on node01
+# ==========================================================
+
+- name: Authenticate nodes (pcs host auth)
+  ansible.builtin.command: >
+    pcs host auth node01 node02 -u hacluster -p {{ hacluster_password_plain }} --force
+  become: true
+  when: inventory_hostname == "node01"
+  changed_when: false
+  failed_when: false
+
+- name: Setup cluster (force)
+  ansible.builtin.command: >
+    pcs cluster setup --name {{ cluster_name }}
+    node01 addr={{ hostvars['node01'].ansible_host }}
+    node02 addr={{ hostvars['node02'].ansible_host }}
+    --force
+  become: true
+  when: inventory_hostname == "node01"
+  changed_when: false
+  failed_when: false
+
+- name: Enable and start cluster
+  ansible.builtin.shell: |
+    pcs cluster enable --all
+    pcs cluster start --all
+  become: true
+  when: inventory_hostname == "node01"
+  changed_when: false
+  failed_when: false
+
+- name: Set 2-node cluster properties
+  ansible.builtin.shell: |
+    pcs property set stonith-enabled=false
+    pcs property set no-quorum-policy=ignore
+  become: true
+  when: inventory_hostname == "node01"
+  changed_when: false
+  failed_when: false
+
+# ---- VIP resource ----
+- name: Create or update VIP resource
+  ansible.builtin.shell: |
+    pcs resource delete vip 2>/dev/null || true
+    pcs resource create vip ocf:heartbeat:IPaddr2 ip={{ vip_address }} cidr_netmask={{ vip_cidr }} nic={{ vip_iface_effective }}
+    pcs resource cleanup vip
+  become: true
+  when: inventory_hostname == "node01"
+  changed_when: false
+  failed_when: false
+
+- name: Show cluster status (proof)
+  ansible.builtin.command: pcs status --full
+  become: true
+  when: inventory_hostname == "node01"
+  register: pcs_status
+  changed_when: false
+
+- name: Print cluster status
+  ansible.builtin.debug:
+    var: pcs_status.stdout_lines
+  when: inventory_hostname == "node01"

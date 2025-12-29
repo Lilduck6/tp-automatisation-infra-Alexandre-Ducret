@@ -1,0 +1,33 @@
+- name: Install samba
+  ansible.builtin.dnf:
+    name:
+      - samba
+      - samba-common
+      - samba-client
+    state: present
+
+- name: Create samba share directory
+  ansible.builtin.file:
+    path: /srv/samba/public
+    state: directory
+    mode: "0777"
+
+- name: Deploy smb.conf
+  ansible.builtin.template:
+    src: smb.conf.j2
+    dest: /etc/samba/smb.conf
+    mode: "0644"
+  notify: restart smb
+
+- name: Enable and start smb service
+  ansible.builtin.systemd:
+    name: smb
+    enabled: true
+    state: started
+
+- name: Create samba cluster resource
+  ansible.builtin.command: >
+    pcs resource create smb systemd:smb op monitor interval=20s
+  when: inventory_hostname == "node01"
+  changed_when: false
+  failed_when: false

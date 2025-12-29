@@ -1,0 +1,24 @@
+- name: Install nginx
+  ansible.builtin.dnf:
+    name: nginx
+    state: present
+
+- name: Deploy web page
+  ansible.builtin.template:
+    src: index.html.j2
+    dest: /usr/share/nginx/html/index.html
+    mode: "0644"
+  notify: restart nginx
+
+- name: Enable and start nginx
+  ansible.builtin.systemd:
+    name: nginx
+    enabled: true
+    state: started
+
+- name: Create nginx cluster resource
+  ansible.builtin.command: >
+    pcs resource create nginx systemd:nginx op monitor interval=10s
+  when: inventory_hostname == "node01"
+  changed_when: false
+  failed_when: false

@@ -1,0 +1,6 @@
+---
+cluster_name: "tpcluster"
+hacluster_password_plain: "Azerty123!"
+
+# vide = auto-détection de l’interface du réseau 192.168.183.0/24
+vip_iface: ""

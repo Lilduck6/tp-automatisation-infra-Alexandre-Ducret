@@ -1,9 +1,0 @@
----
-lab_subnet: "192.168.183.0"
-lab_prefix: "24"
-
-# VIP HA : choisis une IP libre sur ton réseau VMnet1
-vip_address: "192.168.183.100"
-vip_cidr: "24"
-# Zabbix
-zabbix_server_ip: 192.168.183.167

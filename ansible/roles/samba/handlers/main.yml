@@ -1,4 +1,0 @@
-- name: restart smb
-  ansible.builtin.systemd:
-    name: smb
-    state: restarted

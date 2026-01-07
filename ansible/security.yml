@@ -1,6 +1,0 @@
-- name: Mission 2 - Linux Hardening (Node01/Node02)
-  hosts: linux_nodes
-  become: true
-  gather_facts: true
-  roles:
-    - linux_hardening

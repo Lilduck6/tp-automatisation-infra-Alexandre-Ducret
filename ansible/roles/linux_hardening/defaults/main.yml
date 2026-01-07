@@ -1,9 +1,0 @@
----
-# services strictement nécessaires : SSH + HTTP + cluster + zabbix agent (+ samba car mission 1)
-zabbix_agent_port: 10050
-
-cluster_udp_ports:
-  - "5404/udp"
-  - "5405/udp"
-cluster_tcp_ports:
-  - "2224/tcp"

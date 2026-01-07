@@ -1,0 +1,64 @@
+---
+- name: Mission 3 - Durcissement Windows (Hardening)
+  hosts: windows
+  gather_facts: no
+  tasks:
+    # 1. DÉSACTIVER LE COMPTE INVITÉ
+    - name: Désactivation du compte Guest
+      ansible.windows.win_user:
+        name: Guest
+        account_disabled: yes
+        state: present
+
+    # 2. GESTION INTELLIGENTE DU PARE-FEU (CRITIQUE POUR LA SURVIE)
+    - name: Autoriser WinRM (Pour qu'Ansible ne se coupe pas la main)
+      community.windows.win_firewall_rule:
+        name: "Allow WinRM Ansible"
+        localport: 5985
+        action: allow
+        direction: in
+        protocol: tcp
+        profiles: [Domain, Private, Public]
+        state: present
+
+    - name: Autoriser le Ping (ICMP)
+      community.windows.win_firewall_rule:
+        name: "Allow Ping ICMP"
+        protocol: icmpv4
+        action: allow
+        direction: in
+        profiles: [Domain, Private, Public]
+        state: present
+
+    - name: Activation du Pare-feu (Maintenant c'est sans danger !)
+      community.windows.win_firewall:
+        state: enabled
+        profiles: [Domain, Private, Public]
+
+    # 3. POLITIQUE DE MOT DE PASSE (CORRECTION DÉFINITIVE)
+    - name: Application politique mot de passe (via commande native)
+      ansible.windows.win_command: net accounts /minpwlen:12 /maxpwage:unlimited
+
+    # 4. DÉSACTIVER SMBv1 (Via Registre - Méthode Sûre)
+    - name: Désactivation SMBv1 via Registre
+      ansible.windows.win_regedit:
+        path: HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters
+        name: SMB1
+        data: 0
+        type: dword
+        state: present
+      register: smb_reg
+
+    # 5. DÉSACTIVER LLMNR
+    - name: Désactivation LLMNR
+      ansible.windows.win_regedit:
+        path: HKLM:\Software\Policies\Microsoft\Windows NT\DNSClient
+        name: EnableMulticast
+        data: 0
+        type: dword
+        state: present
+
+    # Redémarrage propre si nécessaire
+    - name: Redémarrage final de sécurité
+      ansible.windows.win_reboot:
+      when: smb_reg.changed

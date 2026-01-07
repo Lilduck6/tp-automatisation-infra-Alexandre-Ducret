@@ -10,32 +10,7 @@ Vagrant.configure("2") do |config|
     v.vmx["ethernet1.virtualDev"] = "vmxnet3"
   end
 
-  # =====================
-  # ADMIN (ANSIBLE)
-  # =====================
-  config.vm.define "admin" do |admin|
-    admin.vm.box = "ubuntu/jammy64"
-    admin.vm.hostname = "admin"
-
-    # Réseau LAB (host-only VMware)
-    admin.vm.network "private_network",
-      ip: "192.168.183.10",
-      vmware__network_name: "VMnet1",
-      auto_config: true
-
-    admin.vm.provider "vmware_desktop" do |v|
-      v.vmx["memsize"] = "2048"
-      v.vmx["numvcpus"] = "2"
-    end
-
-    # Provision automatique : collections + playbook
-    admin.vm.provision "shell", inline: <<-SHELL
-      chmod +x /vagrant/ansible/bootstrap.sh
-      /vagrant/ansible/bootstrap.sh
-    SHELL
-  end
-
-  # =====================
+# =====================
   # NODE01 (CLUSTER)
   # =====================
   config.vm.define "node01" do |node|
@@ -52,9 +27,21 @@ Vagrant.configure("2") do |config|
       v.vmx["numvcpus"] = "2"
     end
 
+    # --- CORRECTION ICI ---
     node.vm.provision "shell", inline: <<-SHELL
-      dnf install -y chrony
+      # 1. Activer le dépôt High Availability (Requis pour PCS/Pacemaker sur Rocky 9)
+      dnf install -y dnf-plugins-core
+      dnf config-manager --set-enabled highavailability
+
+      # 2. Installation des paquets HA
+      dnf install -y chrony pcs pacemaker fence-agents-all
+
+      # 3. Activation des services
       systemctl enable --now chronyd
+      systemctl enable --now pcsd
+
+      # 4. Mot de passe hacluster
+      echo 'vagrant' | passwd --stdin hacluster
     SHELL
   end
 
@@ -75,9 +62,21 @@ Vagrant.configure("2") do |config|
       v.vmx["numvcpus"] = "2"
     end
 
+    # --- CORRECTION ICI ---
     node.vm.provision "shell", inline: <<-SHELL
-      dnf install -y chrony
+      # 1. Activer le dépôt High Availability (Requis pour PCS/Pacemaker sur Rocky 9)
+      dnf install -y dnf-plugins-core
+      dnf config-manager --set-enabled highavailability
+
+      # 2. Installation des paquets HA
+      dnf install -y chrony pcs pacemaker fence-agents-all
+
+      # 3. Activation des services
       systemctl enable --now chronyd
+      systemctl enable --now pcsd
+
+      # 4. Mot de passe hacluster
+      echo 'vagrant' | passwd --stdin hacluster
     SHELL
   end
 
@@ -107,6 +106,50 @@ Vagrant.configure("2") do |config|
       powershell -Command "Set-Item WSMan:\\localhost\\Service\\Auth\\Basic -Value true"
       powershell -Command "Enable-PSRemoting -Force"
     PS
+    # Force l'IP statique sur Ethernet1 (la carte réseau privée)
+    win.vm.provision "shell", run: "always", inline: <<-PS
+      $TargetIP = "192.168.183.166"
+      $InterfaceAlias = "Ethernet1"
+      
+      # Vérifie si l'IP est déjà bonne pour gagner du temps
+      $CurrentIP = (Get-NetIPAddress -InterfaceAlias $InterfaceAlias -AddressFamily IPv4 -ErrorAction SilentlyContinue).IPAddress
+      
+      if ($CurrentIP -ne $TargetIP) {
+          Write-Host "Correction de l'IP : Changement de $CurrentIP vers $TargetIP"
+          # Supprime l'ancienne IP dynamique
+          Remove-NetIPAddress -InterfaceAlias $InterfaceAlias -AddressFamily IPv4 -Confirm:$false -ErrorAction SilentlyContinue
+          # Force la nouvelle IP statique
+          New-NetIPAddress -InterfaceAlias $InterfaceAlias -IPAddress $TargetIP -PrefixLength 24 -Confirm:$false
+      } else {
+          Write-Host "IP Correcte : $TargetIP"
+      }
+    PS
+    # ===========================
+  end
+
+  # =====================
+  # ADMIN (ANSIBLE)
+  # =====================
+  config.vm.define "admin" do |admin|
+    admin.vm.box = "bento/ubuntu-22.04"
+    admin.vm.hostname = "admin"
+
+    # Réseau LAB (host-only VMware)
+    admin.vm.network "private_network",
+      ip: "192.168.183.10",
+      vmware__network_name: "VMnet1",
+      auto_config: true
+
+    admin.vm.provider "vmware_desktop" do |v|
+      v.vmx["memsize"] = "2048"
+      v.vmx["numvcpus"] = "2"
+    end
+
+    # Provision automatique : collections + playbook
+    admin.vm.provision "shell", inline: <<-SHELL
+      chmod +x /vagrant/ansible/bootstrap.sh
+      /vagrant/ansible/bootstrap.sh
+    SHELL
   end
 
 end

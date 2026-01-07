@@ -1,0 +1,88 @@
+---
+# PARTIE 1 : Installation sur TOUS les noeuds
+- name: Installation et Configuration de Samba
+  hosts: linux_nodes
+  become: yes
+  tasks:
+    - name: Installation des paquets Samba
+      dnf:
+        name:
+          - samba
+          - samba-client
+          - samba-common
+        state: present
+
+    - name: Création du dossier à partager
+      file:
+        path: /srv/samba/partage
+        state: directory
+        mode: '0777'
+        owner: nobody
+        group: nobody
+
+    - name: Configuration SELinux pour Samba
+      ansible.posix.seboolean:
+        name: samba_export_all_rw
+        state: yes
+        persistent: yes
+      ignore_errors: yes
+
+    - name: Ouverture du Pare-feu
+      firewalld:
+        service: samba
+        permanent: yes
+        state: enabled
+        immediate: yes
+      ignore_errors: yes
+
+    - name: Configuration smb.conf
+      blockinfile:
+        path: /etc/samba/smb.conf
+        block: |
+          [Partage_HA]
+          comment = Partage Haute Dispo
+          path = /srv/samba/partage
+          browsable = yes
+          writable = yes
+          guest ok = yes
+          read only = no
+          create mask = 0775
+
+    # CRITIQUE : On désactive le démarrage automatique !
+    # C'est le cluster qui décidera quand l'allumer.
+    - name: Préparation pour le Cluster (Service désactivé)
+      service:
+        name: smb
+        state: stopped
+        enabled: no
+
+    - name: Démarrage NMB (NetBIOS) reste local
+      service:
+        name: nmb
+        state: started
+        enabled: yes
+
+# PARTIE 2 : Pilotage Cluster (Depuis node01 uniquement)
+- name: Ajout de Samba au Cluster
+  hosts: node01
+  become: yes
+  tasks:
+    - name: Création de la ressource Samba dans Pacemaker
+      shell: >
+        pcs resource create SambaService systemd:smb 
+        op monitor interval=60s
+      register: result
+      failed_when: "result.rc != 0 and 'already exists' not in result.stderr"
+
+    # Le secret de la Mission 1 : TOUT DANS LE MÊME GROUPE
+    # Cela force l'IP, le Web et Samba à rester ensemble (Colocation)
+    - name: Ajout de Samba au groupe HA_Group
+      shell: pcs resource group add HA_Group SambaService
+      register: grp_result
+      failed_when: >
+        grp_result.rc != 0 and 
+        'exists' not in grp_result.stderr and 
+        'already present' not in grp_result.stderr
+
+    - name: Nettoyage (Cleanup)
+      shell: pcs resource cleanup

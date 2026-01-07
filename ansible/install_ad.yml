@@ -1,0 +1,24 @@
+---
+- name: Installation et Configuration Active Directory
+  hosts: windows
+  gather_facts: no # On gagne du temps
+  tasks:
+    - name: Installation des fonctionnalités AD Domain Services
+      ansible.windows.win_feature:
+        name: AD-Domain-Services
+        include_management_tools: yes
+        state: present
+
+    - name: Promotion en Contrôleur de Domaine (Création de la forêt)
+      microsoft.ad.domain:
+        dns_domain_name: mylab.local
+        domain_netbios_name: MYLAB
+        safe_mode_password: Password123!
+        install_dns: yes
+      register: ad_promotion
+
+    - name: Redémarrage du serveur si nécessaire (Promotion AD)
+      ansible.windows.win_reboot:
+        msg: "Rebooting for AD promotion"
+        post_reboot_delay: 120 # On attend un peu plus car Windows AD est long à démarrer
+      when: ad_promotion.reboot_required

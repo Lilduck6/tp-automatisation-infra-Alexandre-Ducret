@@ -1,0 +1,49 @@
+---
+- name: Mission 2 - Durcissement de la Sécurité (Hardening)
+  hosts: linux_nodes
+  become: yes
+  tasks:
+    # --- 1. SÉCURISATION SSH ---
+    - name: Désactiver la connexion SSH en root (PermitRootLogin no)
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^PermitRootLogin'
+        line: 'PermitRootLogin no'
+        state: present
+      notify: Redémarrer SSH
+      # Ansible continuera de fonctionner car il se connecte en 'vagrant' puis fait sudo
+
+    # --- 2. MISES À JOUR AUTOMATIQUES ---
+    - name: Installation de dnf-automatic (Auto Updates)
+      dnf:
+        name: dnf-automatic
+        state: present
+
+    - name: Configuration pour appliquer les mises à jour de sécurité
+      lineinfile:
+        path: /etc/dnf/automatic.conf
+        regexp: '^apply_updates = no'
+        line: 'apply_updates = yes'
+
+    - name: Activation du timer de mise à jour
+      service:
+        name: dnf-automatic.timer
+        state: started
+        enabled: yes
+
+    # --- 3. PARE-FEU (FIREWALLD) ---
+    # Note: SSH, HTTP, HA et Samba sont déjà ouverts par les autres playbooks.
+    # On ajoute ici l'Agent Zabbix (10050) demandé par le PDF pour anticiper la Mission 4.
+    
+    - name: Ouverture du port Agent Zabbix (10050/tcp)
+      firewalld:
+        port: 10050/tcp
+        permanent: yes
+        state: enabled
+        immediate: yes
+
+  handlers:
+    - name: Redémarrer SSH
+      service:
+        name: sshd
+        state: restarted

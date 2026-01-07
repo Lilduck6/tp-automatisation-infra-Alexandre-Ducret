@@ -1,0 +1,69 @@
+---
+# ÉTAPE 1 : Préparation réseau sur TOUS les noeuds
+- name: Préparation des noeuds
+  hosts: node01, node02
+  become: yes
+  tasks:
+    - name: Nettoyage brutal de l'ancien cluster (Reset total)
+      shell: pcs cluster destroy --all
+      ignore_errors: yes
+
+    - name: Ajout des IPs dans /etc/hosts
+      blockinfile:
+        path: /etc/hosts
+        block: |
+          192.168.183.11 node01
+          192.168.183.12 node02
+
+    - name: Ouverture Firewalld (Haute Dispo)
+      firewalld:
+        service: high-availability
+        permanent: yes
+        state: enabled
+        immediate: yes
+      ignore_errors: yes
+
+    - name: Démarrage PCSD
+      service:
+        name: pcsd
+        state: started
+        enabled: yes
+
+    - name: Définition mot de passe hacluster
+      shell: echo 'vagrant' | passwd --stdin hacluster
+      changed_when: false
+
+# ÉTAPE 2 : Création du Cluster (Piloté depuis node01)
+- name: Création du Cluster
+  hosts: node01
+  become: yes
+  tasks:
+    - name: Authentification des noeuds
+      shell: pcs host auth node01 node02 -u hacluster -p vagrant
+      register: auth_cmd
+      failed_when: "'Error' in auth_cmd.stderr and 'already authorized' not in auth_cmd.stderr"
+
+    # --- MODIFICATION CRITIQUE ICI ---
+    # On force l'utilisation des adresses IP (addr=...) pour éviter que Corosync
+    # ne se perde sur l'interface NAT de Vagrant.
+    - name: Création et Démarrage du Cluster (Force IP)
+      shell: >
+        pcs cluster setup mycluster 
+        node01 addr=192.168.183.11 
+        node02 addr=192.168.183.12 
+        --start --enable --force
+
+    - name: Attendre que le cluster soit prêt (10s)
+      pause:
+        seconds: 10
+
+    - name: Désactivation STONITH (Obligatoire)
+      shell: pcs property set stonith-enabled=false
+
+    # ... (vos tâches précédentes) ...
+
+    - name: Création de l'IP Virtuelle (VIP)
+      shell: pcs resource create Cluster_VIP ocf:heartbeat:IPaddr2 ip=192.168.183.100 cidr_netmask=24 op monitor interval=30s
+      register: vip_result
+      # On ignore l'erreur si la ressource existe déjà
+      failed_when: "vip_result.rc != 0 and 'already exists' not in vip_result.stderr"

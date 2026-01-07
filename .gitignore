@@ -1,19 +1,5 @@
-# Vagrant / VMware
 .vagrant/
-*.vmdk
-*.vmx
-*.vmsd
-*.nvram
 *.log
-*.lck/
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Ansible
 *.retry
-
-# Python
-__pycache__/
-*.pyc
+.DS_Store
+*.swp

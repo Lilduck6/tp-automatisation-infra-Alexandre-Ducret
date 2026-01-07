@@ -1,134 +1,133 @@
-# 🖥️ Infrastructure Automatisée – Vagrant & Ansible
+# Déploiement Automatisé d'une Infrastructure Haute Disponibilité & Sécurisée
 
-## 📌 Présentation du projet
-Ce projet a pour objectif de déployer automatiquement une infrastructure complète
-à l’aide de **Vagrant** et **Ansible**, dans une approche *Infrastructure as Code*.
+Ce projet met en œuvre une infrastructure complète, résiliente et sécurisée pour une PME, en utilisant une approche **Infrastructure as Code (IaC)** et **DevOps**.
+L'ensemble de l'environnement est déployé automatiquement via **Vagrant** et configuré via **Ansible**, incluant un cluster Haute Disponibilité (HA), un Contrôleur de Domaine Active Directory, et une supervision centralisée avec Zabbix.
 
-L’infrastructure comprend :
-- Un **cluster haute disponibilité** Linux (Pacemaker / Corosync)
-- Un **serveur Windows** sécurisé
-- Des services **Web (Nginx)** et **Samba**
-- Une **supervision Zabbix**
-- Une **IP virtuelle (VIP)** assurant la continuité de service
+## 🏗️ Architecture du Lab
 
-Le déploiement est entièrement automatisé via la commande :
+L'infrastructure se compose de 4 machines virtuelles interconnectées :
 
+| Machine    |          OS         |                    Rôle                   |          IP           |
+| -----------| ------------------- | ----------------------------------------- | --------------------- |
+| **Admin**  | Ubuntu 22.04        | Nœud de contrôle Ansible + Serveur Zabbix | `192.168.183.10`      |
+| **Node01** | Rocky Linux 9       | Nœud Cluster HA (Web + Samba)             | `192.168.183.11`      |
+| **Node02** | Rocky Linux 9       | Nœud Cluster HA (Web + Samba)             | `192.168.183.12`      |
+| **WinSrv** | Windows Server 2022 | Active Directory (AD DS)                  | `192.168.183.166`     |
+| **VIP**    | (Flottante)         | Adresse IP virtuelle du Cluster           | **`192.168.183.100`** |
+
+### Schéma Logique
+
+![Schéma Architecture](screen/architecture.png)
+
+---
+
+## 🚀 Installation et Démarrage
+
+### Prérequis
+
+* Un hyperviseur (VMware Workstation ou Fusion).
+* Vagrant installé sur la machine hôte.
+* Environ 8-10 Go de RAM disponibles.
+
+### Procédure de déploiement
+
+Le déploiement est **100% automatisé**. Une seule commande suffit pour monter l'infrastructure :
+
+1. Cloner le dépôt :
+```bash
+git clone <votre-lien-repo>
+cd <dossier-du-projet>
+
+```
+
+
+2. Lancer la construction :
 ```bash
 vagrant up
 
-🗺️ Schéma d’architecture
-
-📎 Schéma réalisé avec Draw.io
-
-VM Admin (Ansible / Zabbix)
-
-Node01 / Node02 (Cluster HA)
-
-Windows Server (Sécurité / AD)
-
-IP virtuelle (VIP) pour le service Web
-
-🧱 Architecture détaillée
-
-| Machine | Rôle             | IP              |
-| ------- | ---------------- | --------------- |
-| admin   | Ansible / Zabbix | 192.168.183.167 |
-| node01  | Cluster HA       | DHCP            |
-| node02  | Cluster HA       | DHCP            |
-| winsrv  | Windows sécurisé | 192.168.183.166 |
-| VIP     | Service Web HA   | 192.168.183.100 |
-
-⚙️ Prérequis
-
-Vagrant
-
-VMware Workstation / VirtualBox
-
-Git
-
-Connexion Internet
-
-🚀 Installation & Déploiement
-1️⃣ Cloner le dépôt
-
-cd tp-automatisation
-
-2️⃣ Lancer l’infrastructure
-vagrant up
-
-
-Aucune action manuelle n’est requise.
-Ansible est automatiquement exécuté depuis la VM admin.
-
-🧠 Choix d’architecture
-Pourquoi Vagrant ?
-
-Déploiement reproductible
-
-Environnement isolé
-
-Idéal pour les tests d’infrastructure
-
-Pourquoi Ansible ?
-
-Agentless
-
-Lisible et maintenable
-
-Automatisation complète des configurations système
-
-Stratégie de haute disponibilité
-
-Pacemaker & Corosync gèrent l’état du cluster
-
-Une IP virtuelle (VIP) est déplacée automatiquement
-
-En cas de panne d’un nœud, le service reste accessible
-
-🔐 Sécurité
-
-Pare-feu activé sur Windows
-
-Politique de mots de passe renforcée
-
-Durcissement Linux
-
-Accès distant contrôlé (SSH / WinRM)
-
-📊 Supervision Zabbix
-
-Agent Zabbix installé sur les nœuds Linux
-
-Supervision centralisée
-
-Suivi de la disponibilité des services
-
-
-✅ Preuves de fonctionnement
-Cluster HA
-
-Cluster en état ONLINE
-
-VIP active sur un nœud
+```
 
 
 
+> **Note :** Le provisionning Ansible se lance automatiquement depuis la machine `Admin` via le script `bootstrap.sh`. L'installation complète peut prendre 15 à 20 minutes (notamment pour l'Active Directory et la compilation Zabbix).
+
+---
+
+## 🛡️ Détails des Missions Réalisées
+
+### Mission 1 : Haute Disponibilité (HA)
+
+Mise en place d'un cluster actif/passif avec **Pacemaker** et **Corosync**.
+
+* **VIP :** Une IP flottante (`.100`) bascule automatiquement en cas de panne.
+* **Services :** Serveur Web (Apache) et Samba (Partage de fichiers) sont pilotés par le cluster.
+* **Contraintes :** Colocation stricte configurée (L'IP, le Web et Samba migrent toujours ensemble).
+
+
+### Mission 2 : Sécurisation Linux (Hardening)
+
+Application des règles de sécurité via le playbook `security_linux.yml` :
+
+* 🔒 Désactivation du SSH en `root`.
+* 🧱 Pare-feu (Firewalld) configuré : seuls les ports SSH, HTTP, Cluster et Zabbix sont ouverts.
+* 🔄 Mises à jour de sécurité automatiques activées (`dnf-automatic`).
+
+### Mission 3 : Windows & Active Directory
+
+Configuration complète via Ansible (WinRM) :
+
+* Promotion du serveur en **Contrôleur de Domaine** (`mylab.local`).
+* **Hardening Windows :**
+* Désactivation de SMBv1 et LLMNR.
+* Politique de mot de passe stricte (Min 12 caractères).
+* Pare-feu activé sur tous les profils (Domain/Private/Public).
+* Désactivation du compte Invité.
+
+
+* **IP Fixe :** Script de maintien d'IP statique (`.166`) intégré au démarrage.
+
+### Mission 4 : Supervision Zabbix
+
+Déploiement complet de la stack de monitoring :
+
+* **Serveur :** Installé sur la machine `Admin` (LAMP stack + Zabbix Server).
+* **Agents :** Déployés automatiquement sur `Node01` et `Node02`.
+* **Dashboard :** Tableau de bord personnalisé affichant :
+* La disponibilité du site Web (via la VIP).
+* L'utilisation CPU/RAM des nœuds.
+* Les alertes en temps réel.
 
 
 
+![Dashboard Zabbix](zabbix/dashboard_zabbix.png)
 
-Supervision
 
-Agents Zabbix actifs
+---
 
-Hôtes visibles dans l’interface Zabbix
+## 📂 Structure du projet
 
-📸 Screenshot du dashboard
+```
+.
+├── Vagrantfile             # Définition des VMs et réseaux
+├── README.md               # Documentation
+└── ansible/
+    ├── hosts.ini           # Inventaire (Linux + Windows)
+    ├── bootstrap.sh        # Script d'orchestration global
+    ├── install_ha.yml      # Cluster Pacemaker/Corosync
+    ├── deploy_web.yml      # Service Web
+    ├── deploy_samba.yml    # Service Samba HA
+    ├── security_linux.yml  # Hardening Linux
+    ├── install_ad.yml      # Installation Active Directory
+    ├── security_windows.yml# Hardening Windows
+    ├── install_zabbix_agent.yml
+    └── install_zabbix_server.yml
 
-🏁 Conclusion
+```
 
-Ce projet démontre la mise en place réussie d’une infrastructure automatisée,
-sécurisée et hautement disponible, répondant aux principes de l’Infrastructure as Code.
+---
 
-L’ensemble du déploiement est reproductible, maintenable et validé par des preuves
-de fonctionnement.
+## 👤 Auteurs
+
+* **Alexandre Ducret**
+
+---
